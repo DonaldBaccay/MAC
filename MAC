@@ -1,0 +1,33 @@
+module MAC (inA,inB,macc_out,clk,macc_clear);
+
+parameter n=8;
+
+input signed [n-1:0] inA;
+input signed [n-1:0] inB;
+input clk;
+input macc_clear;
+output reg signed [2*n+2:0] macc_out;
+
+reg signed [2*n+2:0] s;
+reg signed [2*n+2:0] as;
+reg signed [2*n+2:0] d;
+
+initial begin
+	d<=0;
+end
+
+always @(posedge clk) 
+begin
+     macc_out<=d;
+end
+
+always @(inA,inB,macc_out,macc_clear)
+begin
+  s=inA*inB;
+  as=s+macc_out;
+  if(macc_clear)
+    d=s;
+  else d=as;
+end
+ 
+endmodule
