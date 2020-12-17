@@ -1,0 +1,213 @@
+module EightNTwoMac(
+
+	clk,
+	start,
+	reset,
+	done,
+   clock_count
+
+	
+);
+
+parameter n=8;
+parameter m=2;
+
+input clk;
+input start;
+input reset;
+output reg done;
+output reg [10:0] clock_count;
+
+reg [n-1:0] a1;
+reg [n-1:0] a2;
+
+reg [n-1:0] b;
+
+reg [n-1:0] matrixA [n*n-1:0];
+reg [n-1:0] matrixB [n*n-1:0];
+
+reg [2*n+2:0] buffer1;
+reg [2*n+2:0] buffer2;
+reg nextBuffer1;
+
+reg bufferEnable;
+reg saveEnable;
+reg macc_clear;
+reg loadEnable;
+
+reg [n-1:0] Address1;
+reg [n-1:0] Address2;
+reg [n-1:0] currentAddress;
+
+
+wire [2*n+2:0] c1;
+wire [2*n+2:0] c2;
+
+reg [2*n+2:0] C;
+
+reg calcDone;
+
+integer A,B,i,nextCounter,relativeCounter,calcDoneCounter, doneCounter,address;
+
+initial begin
+$readmemb ("ram_a_init.txt", matrixA);
+$readmemb ("ram_b_init.txt", matrixB);
+end
+
+initial begin
+	a1=0;
+	a2=0;
+	b=0;
+	bufferEnable=1'b0;
+end
+
+always @(posedge clk or address) begin
+	if(saveEnable==1'b1) begin
+	Address1=address;
+	Address2=address+(n/m);
+	end
+end
+
+always@(A or B) begin
+	a1=matrixA[A];
+	a2=matrixA[A+(n/m)];
+	
+	b=matrixB[B];
+end
+
+always@(posedge clk) begin
+	if (saveEnable==1'b1) begin
+		buffer1<=c1;
+		buffer2<=c2;
+		bufferEnable<=1'b1;
+	end
+	else if(bufferEnable==1'b1) begin
+		if(nextBuffer1==1'b1)begin
+			C<=buffer2;
+			nextBuffer1<=1'b0;
+			doneCounter<=doneCounter+1;
+			currentAddress<=Address2;
+		end
+		else begin
+			C<=buffer1;
+			nextBuffer1<=1'b1;
+			doneCounter<=doneCounter+1;
+			currentAddress<=Address1;
+		end
+	end
+	else if(doneCounter==n*n) begin
+		doneCounter<=n*n+1;
+	end
+	else if(doneCounter==n*n+1) begin
+		done=1'b1;
+	end
+end
+
+MAC CORE1(a1,b,c1,clk,macc_clear);
+MAC CORE2(a2,b,c2,clk,macc_clear);
+
+RAM RAMOUTPUT(bufferEnable,C,clk,currentAddress);
+
+	always@(posedge clk) begin
+		if(reset==1) begin
+			clock_count<=11'b00000000000;
+			relativeCounter<=0;
+			nextCounter<=0;
+			doneCounter<=0;
+			calcDoneCounter<=0;
+			calcDone<=1'b0;
+			saveEnable<=1'b0;
+			macc_clear<=1'b1;
+			loadEnable=1'b0;
+			address=0;
+			i<=0;
+			a1=0;
+			a2=0;
+			b=0;
+			nextBuffer1=1'b0;
+		end
+		else if((start==1'b1)||(loadEnable==1'b1)) begin
+			loadEnable=1'b1;
+			if(calcDone==0) begin		
+				macc_clear<=1'b0;
+				saveEnable<=1'b0;				
+				relativeCounter<=relativeCounter+1;
+				
+				if(clock_count==1'b0) begin
+					B<=0;
+					A<=0;	
+				end
+				
+				else if(nextCounter==(n)) begin		
+					macc_clear<=1'b1;
+					saveEnable<=1'b1;
+					address<=i+(nextCounter-1)*n;
+					i=i+1;
+					B=0;
+					A=i;
+					nextCounter=0;
+				end
+				else if(relativeCounter==(n-1)) begin
+					relativeCounter<=0;
+					A<=A+n;
+					B<=B+1;
+					nextCounter<=nextCounter+1;
+					calcDoneCounter<=calcDoneCounter+1;
+				end
+				else if(calcDoneCounter==((n*n)/m)) begin
+					calcDone<=1;
+				end
+				else if(relativeCounter==0)begin
+					A<=i;
+					B<=B+1;
+					macc_clear<=1'b1;
+					saveEnable<=1'b1;
+					address<=i+(nextCounter-1)*n;
+				end			
+				else begin
+					A<=A+n;
+					B<=B+1;
+				end	
+				if(relativeCounter==1)begin
+					address<=i+(nextCounter-1)*n;
+				end
+				clock_count<=clock_count+1;
+			end
+			
+			else begin
+				saveEnable<=1'b0;
+				if(done==1'b0) begin
+					clock_count<=clock_count+1;
+				end
+				else begin
+					clock_count<=clock_count;
+				end
+			end
+		end
+	end
+		
+endmodule 
+
+module RAM( 
+	enableWrite,
+	Cinput,
+   clock,
+   Address
+	);
+	
+	parameter n=8;
+	
+	input  enableWrite;
+	input  [2*n+2:0] Cinput; 
+	input  clock;
+	input  [n-1:0] Address;
+
+	reg signed [2*n+2:0] mem [n*n-1:0];
+	
+	always@(posedge clock) begin
+		if(enableWrite==1'b1) begin
+			mem[Address]=Cinput;
+		end
+	end
+
+endmodule
